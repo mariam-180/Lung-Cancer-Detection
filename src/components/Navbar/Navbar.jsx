@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Style from './Navbar.module.css';
 import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../Context/AuthContext';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
