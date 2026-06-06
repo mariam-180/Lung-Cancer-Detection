@@ -525,7 +525,7 @@
 // }
 import React, { useState } from "react";
 import styles from "./Login.module.css";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../Context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 
