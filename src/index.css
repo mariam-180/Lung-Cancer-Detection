@@ -1,17 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,100..900;1,100..900&display=swap');
 @import "tailwindcss";
-
-* {
+*{
   font-family: "Inter", sans-serif;
-  margin: 0;
-  overflow: hidden;
+margin: 0;
+ overflow: hidden;
   box-sizing: border-box;
 }
+
 
 .container {
   @apply mx-auto w-[90%];
 }
 
 .active {
-  color: #2391f2;
+color: #2391f2;
+
 }
