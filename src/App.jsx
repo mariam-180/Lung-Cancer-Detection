@@ -47,7 +47,7 @@ import Register from './components/Register/Register';
 import DoctorProfile from './components/DoctorProfile/DoctorProfile';
 import MainContent from './components/MainContent/MainContent';
 import AdminPage from './components/AdminPage/AdminPage';
-import AuthProvider from './context/AuthContext';
+import AuthProvider from './Context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 
 const routing = createBrowserRouter([
