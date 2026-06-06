@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import Style from './Cases.module.css'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../Context/AuthContext'
 import axios from 'axios'
 
 const BASE_URL = 'https://lungcancer.runasp.net/api/Doctor'

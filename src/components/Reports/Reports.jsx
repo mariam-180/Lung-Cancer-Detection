@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Style from './Reports.module.css';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../Context/AuthContext';
 import axios from 'axios';
 
 const API_BASE = 'https://lungcancer.runasp.net/api/Doctor';
