@@ -13,7 +13,7 @@ const CLASSIFICATION_OPTIONS = {
   'Large Cell Carcinoma': 4
 };
 
-const CLASSIFICATION_NAMES = ['Normal', 'Adenocarcinoma', 'LSCC', 'SCC', 'Large Cell Carcinoma'];
+const CLASSIFICATION_NAMES = ['Normal', 'Adenocarcinoma', 'SCC'];
 
 export default function Reports() {
   const { token } = useAuth();

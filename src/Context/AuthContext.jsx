@@ -24,10 +24,33 @@ export default function AuthProvider({ children }) {
 
     localStorage.setItem("user", JSON.stringify(userData));
     localStorage.setItem("token", data.token);
-    localStorage.setItem("refreshToken", data.refreshToken); // ← save refreshToken
+    localStorage.setItem("refreshToken", data.refreshToken);
   }
 
-  function logout() {
+  async function logout() {
+    const currentRefreshToken = localStorage.getItem("refreshToken");
+    const currentToken = localStorage.getItem("token");
+
+    // Tell the API to invalidate the refresh token so it can never be reused
+    if (currentRefreshToken && currentToken) {
+      try {
+        await axios.post(
+          "https://lungcancer.runasp.net/api/Auth/revoke-token",
+          JSON.stringify(currentRefreshToken), // API expects a raw string body
+          {
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      } catch (err) {
+        // Even if revoke fails, we still clear everything locally
+        console.warn("Revoke token failed:", err?.response?.status);
+      }
+    }
+
+    // Always clear local state regardless of API result
     setUser(null);
     setToken(null);
     localStorage.removeItem("user");
@@ -43,7 +66,6 @@ export default function AuthProvider({ children }) {
     });
   }
 
-  // Called automatically when any request gets a 401
   async function refreshAccessToken() {
     const currentToken = localStorage.getItem("token");
     const currentRefreshToken = localStorage.getItem("refreshToken");
@@ -64,14 +86,12 @@ export default function AuthProvider({ children }) {
 
       const data = response.data.data;
 
-      // Update token + refreshToken in state and localStorage
       setToken(data.token);
       localStorage.setItem("token", data.token);
       localStorage.setItem("refreshToken", data.refreshToken);
 
-      return data.token; // return new token so the failed request can retry
+      return data.token;
     } catch (err) {
-      // Refresh failed → force logout
       logout();
       return null;
     }

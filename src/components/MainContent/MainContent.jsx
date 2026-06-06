@@ -22,13 +22,13 @@ export default function MainContent() {
           <div className={Style.badge}>AI-Powered Platform</div>
           <h1>Smart Medical <span className={Style.highlight}>Dashboard</span></h1>
           <p>Your intelligent assistant for patients, reports, and appointments</p>
-          <div className={Style.stats}>
+          {/* <div className={Style.stats}>
             <div className={Style.stat}><strong>2.4k</strong><span>Patients</span></div>
             <div className={Style.statDivider}/>
             <div className={Style.stat}><strong>98%</strong><span>Accuracy</span></div>
             <div className={Style.statDivider}/>
             <div className={Style.stat}><strong>24/7</strong><span>Support</span></div>
-          </div>
+          </div> */}
           <div className={Style.actions}>
             <button className={Style.btnPrimary} onClick={scrollToHome}>
               Get Started

@@ -14,6 +14,7 @@ function pctNum(val) {
   return parseFloat((val * 100).toFixed(1))
 }
 
+
 export default function Home() {
   const { token } = useAuth()
   const [activeTab, setActiveTab] = useState('case')
@@ -205,8 +206,8 @@ export default function Home() {
                     <i className="fa-solid fa-file-waveform"></i>
                   </div>
                   <div>
-                    <p className={Style.featureTitle}>Auto Reports</p>
-                    <p className={Style.featureSub}>Detailed PDF generated instantly</p>
+                    <p className={Style.featureTitle}> Reports</p>
+                    <p className={Style.featureSub}>Detailed Reports generated instantly</p>
                   </div>
                 </div>
                 <div className={Style.featureItem}>
@@ -214,28 +215,12 @@ export default function Home() {
                     <i className="fa-solid fa-shield-halved"></i>
                   </div>
                   <div>
-                    <p className={Style.featureTitle}>98% Accuracy</p>
                     <p className={Style.featureSub}>Clinically validated model</p>
                   </div>
                 </div>
               </div>
 
-              <div className={Style.aiStats}>
-                <div className={Style.stat}>
-                  <strong>12k+</strong>
-                  <span>Scans Analyzed</span>
-                </div>
-                <div className={Style.statDivider}></div>
-                <div className={Style.stat}>
-                  <strong>93%</strong>
-                  <span>Accuracy</span>
-                </div>
-                <div className={Style.statDivider}></div>
-                <div className={Style.stat}>
-                  <strong>3s</strong>
-                  <span>Avg Response</span>
-                </div>
-              </div>
+ 
 
             </div>
             <div className={Style.blob1}></div>
