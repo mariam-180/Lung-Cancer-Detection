@@ -28,41 +28,18 @@ function badgeStyle(status) {
   };
 }
 
-function PaginationBtn({ children, onClick, disabled, active }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: '7px 14px', borderRadius: 10,
-        border: active ? 'none' : '1px solid #dde3ed',
-        background: active
-          ? 'linear-gradient(135deg, #5282d4, #3a62b8)'
-          : 'white',
-        color:  active ? 'white' : disabled ? '#cbd5e1' : '#475569',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        fontSize: '0.82rem', fontWeight: active ? 700 : 600,
-        fontFamily: 'inherit', transition: 'all 0.15s',
-        boxShadow: active ? '0 4px 12px rgba(79,120,200,0.3)' : 'none',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 export default function Appointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState('');
 
-  // Pagination
+  // Pagination - CHANGED: pageSize from 10 to 2 for testing
   const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize]                  = useState(10);
+  const [pageSize]                  = useState(5); // ← CHANGED: 10 → 2 to force pagination
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [hasNext, setHasNext]       = useState(false);
-  const [hasPrev, setHasPrev]       = useState(false);
+  const [hasNextPage, setHasNextPage]           = useState(false);
+  const [hasPreviousPage, setHasPreviousPage]   = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm]         = useState('');
@@ -109,15 +86,24 @@ export default function Appointments() {
       });
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const result = await res.json();
+      
       const d = result?.data;
       if (d && Array.isArray(d.items)) {
         setAppointments(d.items);
-        setTotalCount(d.totalCount   ?? 0);
-        setTotalPages(d.totalPages   ?? 0);
-        setHasNext(d.hasNextPage     ?? false);
-        setHasPrev(d.hasPreviousPage ?? false);
+        setTotalCount(d.totalCount ?? 0);
+        const calculatedPages = d.totalPages ?? Math.ceil((d.totalCount ?? 0) / pageSize);
+        setTotalPages(calculatedPages);
+        setHasNextPage(d.hasNextPage ?? false);
+        setHasPreviousPage(d.hasPreviousPage ?? false);
+      } else if (Array.isArray(result)) {
+        // Fallback: if API returns array directly
+        setAppointments(result);
+        setTotalCount(result.length);
+        setTotalPages(Math.ceil(result.length / pageSize));
       } else {
         setAppointments([]);
+        setTotalCount(0);
+        setTotalPages(0);
       }
     } catch (err) {
       console.error(err);
@@ -314,9 +300,6 @@ export default function Appointments() {
   /* ════════════════════════════════════════
      LIST VIEW
   ════════════════════════════════════════ */
-  const visiblePages = Array.from({ length: totalPages }, (_, i) => i + 1)
-    .filter(p => Math.abs(p - pageNumber) <= 2);
-
   return (
     <div className={Style.wrapper}>
       <div className={Style.maindiv}>
@@ -462,34 +445,59 @@ export default function Appointments() {
               ))}
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 32, flexWrap: 'wrap' }}>
-                <PaginationBtn onClick={() => setPageNumber(1)} disabled={!hasPrev}>«</PaginationBtn>
-                <PaginationBtn onClick={() => setPageNumber(p => p - 1)} disabled={!hasPrev}>‹ Prev</PaginationBtn>
+            {/* PAGINATION - Always show for testing */}
+            <div style={{
+              flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center',
+              gap: '7px', padding: '10px 0', borderTop: '1px solid #e2e8f0',
+              marginTop: 32,
+            }}>
+              {/* Previous button */}
+              <button 
+                onClick={() => setPageNumber(p => p - 1)} 
+                disabled={!hasPreviousPage} 
+                style={{
+                  width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #e2e8f0',
+                  background: '#fff', cursor: !hasPreviousPage ? 'not-allowed' : 'pointer',
+                  opacity: !hasPreviousPage ? 0.35 : 1, fontSize: '18px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', color: '#64748b',
+                }}
+              >
+                ‹
+              </button>
 
-                {visiblePages[0] > 1 && (
-                  <>
-                    <PaginationBtn onClick={() => setPageNumber(1)}>1</PaginationBtn>
-                    {visiblePages[0] > 2 && <span style={{ color: '#94a3b8', padding: '0 4px' }}>…</span>}
-                  </>
-                )}
+              {/* Page number buttons */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button 
+                  key={page} 
+                  onClick={() => setPageNumber(page)} 
+                  style={{
+                    width: '34px', height: '34px', borderRadius: '9px',
+                    border: page === pageNumber ? 'none' : '1px solid #e2e8f0',
+                    background: page === pageNumber ? 'linear-gradient(135deg,#3b82f6,#2563eb)' : '#fff',
+                    color: page === pageNumber ? '#fff' : '#475569',
+                    fontWeight: page === pageNumber ? '700' : '500',
+                    fontSize: '13px', cursor: 'pointer',
+                    boxShadow: page === pageNumber ? '0 4px 12px rgba(37,99,235,0.32)' : 'none',
+                  }}
+                >
+                  {page}
+                </button>
+              ))}
 
-                {visiblePages.map(p => (
-                  <PaginationBtn key={p} onClick={() => setPageNumber(p)} active={p === pageNumber}>{p}</PaginationBtn>
-                ))}
-
-                {visiblePages[visiblePages.length - 1] < totalPages && (
-                  <>
-                    {visiblePages[visiblePages.length - 1] < totalPages - 1 && <span style={{ color: '#94a3b8', padding: '0 4px' }}>…</span>}
-                    <PaginationBtn onClick={() => setPageNumber(totalPages)}>{totalPages}</PaginationBtn>
-                  </>
-                )}
-
-                <PaginationBtn onClick={() => setPageNumber(p => p + 1)} disabled={!hasNext}>Next ›</PaginationBtn>
-                <PaginationBtn onClick={() => setPageNumber(totalPages)} disabled={!hasNext}>»</PaginationBtn>
-              </div>
-            )}
+              {/* Next button */}
+              <button 
+                onClick={() => setPageNumber(p => p + 1)} 
+                disabled={!hasNextPage} 
+                style={{
+                  width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #e2e8f0',
+                  background: '#fff', cursor: !hasNextPage ? 'not-allowed' : 'pointer',
+                  opacity: !hasNextPage ? 0.35 : 1, fontSize: '18px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', color: '#64748b',
+                }}
+              >
+                ›
+              </button>
+            </div>
 
             <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#94a3b8', marginTop: 12 }}>
               Showing {appointments.length} of {totalCount} appointments

@@ -51,28 +51,33 @@ export default function MainContent() {
         </div>
       </section>
 
+   {/* Appointments Section */}
+      <section className={`${Style.section} ${Style.appointmentsSection} appointmentsection`}>
+        <Appointments />
+      </section>
+
+    {/* Cases Section */}
+      <section className={`${Style.section} ${Style.casesSection} casessection`}>
+        <Cases />
+      </section>
+
       {/* Home Section */}
       <section ref={homeRef} className={`${Style.section} ${Style.homeSection} homesection`}>
         <Home />
       </section>
-
-      {/* Cases Section */}
-      <section className={`${Style.section} ${Style.casesSection} casessection`}>
-        <Cases />
+  
+        {/* Reports Section */}
+      <section className={`${Style.section} ${Style.reportsSection} reportsection`}>
+        <Reports />
       </section>
+      
    {/* patients Section */}
       <section className={`${Style.section}  appointmentsection`}>
        <DoctorPatients/>
       </section>
-      {/* Reports Section */}
-      <section className={`${Style.section} ${Style.reportsSection} reportsection`}>
-        <Reports />
-      </section>
 
-      {/* Appointments Section */}
-      <section className={`${Style.section} ${Style.appointmentsSection} appointmentsection`}>
-        <Appointments />
-      </section>
+
+   
 
     </div>
   )

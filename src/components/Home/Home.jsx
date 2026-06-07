@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import Style from './Home.module.css'
 import { useAuth } from '../../Context/AuthContext'
 import axios from 'axios'
@@ -32,22 +32,23 @@ const ALL_CLASSES = [
   { key: 'lungsquamouscellcarcinoma', label: 'Lung Squamous Cell Carcinoma' },
 ]
 
-// FIX: Build conf items using the passed result directly (not stale state)
+// Winner gets the real confidence score (e.g. 99.9%)
+// Non-winners get exactly 0% — only the winner's bar is colored
 function buildConfItems(result) {
-  if (!result) return ALL_CLASSES.map(c => ({ label: c.label, value: null }))
+  if (!result) return ALL_CLASSES.map(c => ({ label: c.label, value: null, isWinner: false }))
   const winnerKey = (result.classification ?? '').toLowerCase().replace(/[\s_]/g, '')
   const score     = result.confidenceScore ?? null
   return ALL_CLASSES.map(c => ({
-    label: c.label,
-    // Winner gets the real confidence score, others get remainder split
-    value: c.key === winnerKey ? score : (score != null ? (1 - score) / (ALL_CLASSES.length - 1) : null),
+    label:    c.label,
+    value:    c.key === winnerKey ? score : (score != null ? 0 : null),
+    isWinner: c.key === winnerKey,
   }))
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const { token } = useAuth()
-  const [activeTab, setActiveTab] = useState('case')
+  const [activeTab, setActiveTab] = useState('upload')
 
   // ── Case state ────────────────────────────────────────────────────────────
   const [cases, setCases]             = useState([])
@@ -70,20 +71,11 @@ export default function Home() {
   const [analyzeError, setAnalyzeError]     = useState('')
   const [analysisResult, setAnalysisResult] = useState(null)
 
-  // FIX: Use a single ref to hold the latest analysis result so the
-  // tab switch always reads the freshest value regardless of batching.
   const analysisResultRef = useRef(null)
+  const [fileInputKey, setFileInputKey]     = useState(0)
+  const uploadedScanRef                     = useRef(null)
 
-  const [fileInputKey, setFileInputKey] = useState(0)
-
-  // Ref that always mirrors the latest uploadedScan so handleAnalyze
-  // never reads a stale closure value after async state updates.
-  const uploadedScanRef = useRef(null)
-
-  useEffect(() => {
-    uploadedScanRef.current = uploadedScan
-  }, [uploadedScan])
-
+  useEffect(() => { uploadedScanRef.current = uploadedScan }, [uploadedScan])
   useEffect(() => { fetchCases() }, [token])
 
   async function fetchCases() {
@@ -100,7 +92,6 @@ export default function Home() {
     }
   }
 
-  // ── Reset the entire scan pipeline ────────────────────────────────────────
   function resetScanPipeline() {
     setScanFile(null)
     setScanPreview(null)
@@ -113,9 +104,6 @@ export default function Home() {
     setFileInputKey(k => k + 1)
   }
 
-  // ── Apply a chosen File object ────────────────────────────────────────────
-  // FIX: Only clear upload/analysis state, NOT the file itself,
-  // so re-uploading the same case with the same file works on repeat.
   function applyFile(file) {
     if (!file) return
     setUploadedScan(null)
@@ -124,9 +112,7 @@ export default function Home() {
     analysisResultRef.current = null
     setUploadError('')
     setAnalyzeError('')
-
     setScanFile(file)
-
     if (file.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onload = ev => setScanPreview(ev.target.result)
@@ -147,62 +133,54 @@ export default function Home() {
     applyFile(e.dataTransfer.files?.[0])
   }
 
-  // ── Create Case ───────────────────────────────────────────────────────────
-  async function handleCreateCase() {
-    setCaseError('')
-    setCaseSuccess('')
-    if (!caseForm.patientId) { setCaseError('Patient ID is required.'); return }
-    try {
-      setCaseLoading(true)
-      const res = await axios.post(
-        `${BASE_URL}/cases`,
-        {
-          patientId:   parseInt(caseForm.patientId, 10),
-          description: caseForm.description,
-          symptoms:    caseForm.symptoms,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      const created = res.data?.data ?? res.data
-      setCreatedCase(created)
-      setCaseSuccess(`Case #${created?.id ?? ''} created successfully!`)
-      setCaseForm({ patientId: '', description: '', symptoms: '' })
-      await fetchCases()
-      if (created?.id) setSelectedCaseId(String(created.id))
-      window.dispatchEvent(new CustomEvent('case-created'))
-    } catch (err) {
-      console.error('[Home] createCase:', err)
-      setCaseError(err.response?.data?.message ?? 'Failed to create case. Please try again.')
-    } finally {
-      setCaseLoading(false)
-    }
-  }
+  // async function handleCreateCase() {
+  //   setCaseError('')
+  //   setCaseSuccess('')
+  //   if (!caseForm.patientId) { setCaseError('Patient ID is required.'); return }
+  //   try {
+  //     setCaseLoading(true)
+  //     const res = await axios.post(
+  //       `${BASE_URL}/cases`,
+  //       {
+  //         patientId:   parseInt(caseForm.patientId, 10),
+  //         description: caseForm.description,
+  //         symptoms:    caseForm.symptoms,
+  //       },
+  //       { headers: { Authorization: `Bearer ${token}` } }
+  //     )
+  //     const created = res.data?.data ?? res.data
+  //     setCreatedCase(created)
+  //     setCaseSuccess(`Case #${created?.id ?? ''} created successfully!`)
+  //     setCaseForm({ patientId: '', description: '', symptoms: '' })
+  //     await fetchCases()
+  //     if (created?.id) setSelectedCaseId(String(created.id))
+  //     window.dispatchEvent(new CustomEvent('case-created'))
+  //   } catch (err) {
+  //     console.error('[Home] createCase:', err)
+  //     setCaseError(err.response?.data?.message ?? 'Failed to create case. Please try again.')
+  //   } finally {
+  //     setCaseLoading(false)
+  //   }
+  // }
 
-  // ── Upload Scan ───────────────────────────────────────────────────────────
-  // FIX: Don't wipe scanFile here — only wipe the previous scan result.
   async function handleUploadScan() {
     setUploadError('')
     if (!selectedCaseId) { setUploadError('Please select a case first.'); return }
     if (!scanFile)        { setUploadError('Please select a scan file.'); return }
-
-    // Clear previous upload+analysis so the UI shows the fresh result
     setUploadedScan(null)
     uploadedScanRef.current = null
     setAnalysisResult(null)
     analysisResultRef.current = null
     setAnalyzeError('')
-
     try {
       setUploadLoading(true)
       const formData = new FormData()
       formData.append('file', scanFile)
-
       const res = await axios.post(
         `${BASE_URL}/cases/${selectedCaseId}/scans`,
         formData,
         { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
       )
-
       const scan = res.data?.data ?? res.data
       console.log('[Home] uploadedScan:', scan)
       setUploadedScan(scan)
@@ -215,17 +193,12 @@ export default function Home() {
     }
   }
 
-  // ── Analyze ───────────────────────────────────────────────────────────────
-  // FIX: Store result in ref BEFORE switching tab so the analyze tab
-  // always renders with the latest data (avoids React batching race).
   async function handleAnalyze() {
     const currentScan = uploadedScanRef.current
     if (!currentScan?.id) { setAnalyzeError('Upload a scan first.'); return }
-
     setAnalyzeError('')
     setAnalysisResult(null)
     analysisResultRef.current = null
-
     try {
       setAnalyzeLoading(true)
       const res = await axios.post(
@@ -235,9 +208,6 @@ export default function Home() {
       )
       const result = res.data?.data ?? res.data
       console.log('[Home] analysisResult:', result)
-
-      // FIX: Write to ref first so the tab renders with the correct value
-      // even if React batches the state update with setActiveTab.
       analysisResultRef.current = result
       setAnalysisResult(result)
       setActiveTab('analyze')
@@ -249,10 +219,8 @@ export default function Home() {
     }
   }
 
-  // FIX: Always derive confItems from the ref-backed result so the
-  // analyze tab never shows stale/empty data on first render after switch.
   const latestResult = analysisResult ?? analysisResultRef.current
-  const confItems = buildConfItems(latestResult)
+  const confItems    = buildConfItems(latestResult)
 
   return (
     <section className={`${Style.homeSection} homesectioncomponent`}>
@@ -293,7 +261,7 @@ export default function Home() {
                     <i className="fa-solid fa-file-waveform"></i>
                   </div>
                   <div>
-                    <p className={Style.featureTitle}> Reports</p>
+                    <p className={Style.featureTitle}>Reports</p>
                     <p className={Style.featureSub}>Detailed Reports generated instantly</p>
                   </div>
                 </div>
@@ -326,17 +294,12 @@ export default function Home() {
                 onClick={() => setActiveTab('analyze')}>
                 <i className="fa-solid fa-brain"></i> AI Analysis
               </button>
-              <button
-                className={`${Style.tab} ${activeTab === 'case'    ? Style.activeTab : ''}`}
-                onClick={() => setActiveTab('case')}>
-                <i className="fa-solid fa-folder-plus"></i> New Case
-              </button>
+            
             </div>
 
             {/* ══ UPLOAD TAB ══════════════════════════════════════════════════ */}
             {activeTab === 'upload' && (
               <div className={Style.scanArea}>
-
                 <input
                   key={fileInputKey}
                   type="file"
@@ -345,7 +308,6 @@ export default function Home() {
                   accept="image/*,.pdf"
                   onChange={handleFileChange}
                 />
-
                 <div className={Style.uploadInner}>
 
                   {/* Case selector */}
@@ -474,15 +436,25 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* Confidence bars — only the winner is colored, others show 0% gray */}
                     <div className={Style.confList}>
-                      {confItems.map(({ label, value }) => (
+                      {confItems.map(({ label, value, isWinner }) => (
                         <div key={label} className={Style.confItem}>
                           <div className={Style.confHeader}>
                             <span className={Style.confLabel}>{label}</span>
                             <span className={Style.confPercent}>{pct(value)}</span>
                           </div>
                           <div className={Style.confBarBg}>
-                            <div className={Style.confBarFill} style={{ width: `${pctNum(value)}%` }} />
+                            <div
+                              className={Style.confBarFill}
+                              style={{
+                                width:      `${pctNum(value)}%`,
+                                // Only color the winner's bar; others stay gray/transparent
+                                background: isWinner
+                                  ? undefined          // let CSS class handle the gradient
+                                  : 'transparent',
+                              }}
+                            />
                           </div>
                         </div>
                       ))}
@@ -543,7 +515,7 @@ export default function Home() {
             )}
 
             {/* ══ NEW CASE TAB ═══════════════════════════════════════════════ */}
-            {activeTab === 'case' && (
+            {/* {activeTab === 'case' && (
               <div className={Style.tabContent}>
                 <div className={Style.caseCard}>
                   <div className={Style.caseCardHeader}>
@@ -628,7 +600,7 @@ export default function Home() {
                   )}
                 </div>
               </div>
-            )}
+            )} */}
 
           </div>
         </div>

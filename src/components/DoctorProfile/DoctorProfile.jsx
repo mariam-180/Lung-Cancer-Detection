@@ -232,15 +232,6 @@ export default function DoctorProfile() {
 
         {/* ── Left: Profile Card ── */}
         <div className={Style.leftCol}>
-          <div className={Style.avatarWrap}>
-            <img
-              src={doctor?.profileImage || doctor?.image || "https://randomuser.me/api/portraits/men/32.jpg"}
-              alt="Doctor"
-              className={Style.avatar}
-            />
-            <span className={Style.onlineDot}></span>
-          </div>
-
           <h2 className={Style.doctorName}>
             {doctor?.fullName || doctor?.name || 'N/A'}
           </h2>
@@ -322,7 +313,7 @@ export default function DoctorProfile() {
               <div className={Style.section}>
                 <div className={Style.sectionHeader}>
                   <div className={Style.sectionIcon}><i className="fa-solid fa-list-check"></i></div>
-                  <h3 className={Style.sectionTitle}>Services & Price List</h3>
+                  <h3 className={Style.sectionTitle}>Services</h3>
                 </div>
                 <div className={Style.servicesList}>
                   <div className={Style.serviceRow}>
