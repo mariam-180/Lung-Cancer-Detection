@@ -60,7 +60,7 @@ const routing = createBrowserRouter([
       { index: true, element: <Welcome /> },
       { path: 'register', element: <Register /> },
       { path: 'login', element: <Login /> },
-      { path: 'resetPassword', element: <ResetPassword /> },
+      { path: 'reset-password', element: <ResetPassword /> },
       { path: 'article', element: <Article /> },
       { path: '*', element: <Notfound /> },
 
