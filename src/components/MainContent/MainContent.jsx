@@ -7,10 +7,10 @@ import Appointments from '../Appointments/Appointments'
 import DoctorPatients from '../DoctorPatients/DoctorPatients'
 
 export default function MainContent() {
-  const homeRef = useRef(null)
+  const appointmentsRef = useRef(null)
 
-  const scrollToHome = () => {
-    homeRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToAppointments = () => {
+    appointmentsRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   return (
@@ -18,23 +18,20 @@ export default function MainContent() {
 
       {/* Intro Section */}
       <section className={`${Style.section} ${Style.introSection} siteDashboardIntro`}>
-        <div className={`${Style.introContent} `}>
+        <div className={Style.introContent}>
           <div className={Style.badge}>AI-Powered Platform</div>
-          <h1>Smart Medical <span className={Style.highlight}>Dashboard</span></h1>
+          <h1>
+            Smart Medical <span className={Style.highlight}>Dashboard</span>
+          </h1>
           <p>Your intelligent assistant for patients, reports, and appointments</p>
-          {/* <div className={Style.stats}>
-            <div className={Style.stat}><strong>2.4k</strong><span>Patients</span></div>
-            <div className={Style.statDivider}/>
-            <div className={Style.stat}><strong>98%</strong><span>Accuracy</span></div>
-            <div className={Style.statDivider}/>
-            <div className={Style.stat}><strong>24/7</strong><span>Support</span></div>
-          </div> */}
+
           <div className={Style.actions}>
-            <button className={Style.btnPrimary} onClick={scrollToHome}>
+            <button className={Style.btnPrimary} onClick={scrollToAppointments}>
               Get Started
             </button>
           </div>
         </div>
+
         <div className={Style.floatingCards}>
           <div className={`${Style.card} ${Style.card1}`}>
             <i className="fa-solid fa-heart-pulse"></i>
@@ -51,33 +48,33 @@ export default function MainContent() {
         </div>
       </section>
 
-   {/* Appointments Section */}
-      <section className={`${Style.section} ${Style.appointmentsSection} appointmentsection`}>
+      {/* Appointments Section */}
+      <section
+        ref={appointmentsRef}
+        className={`${Style.section} ${Style.appointmentsSection} appointmentsection`}
+      >
         <Appointments />
       </section>
 
-    {/* Cases Section */}
+      {/* Cases Section */}
       <section className={`${Style.section} ${Style.casesSection} casessection`}>
         <Cases />
       </section>
 
       {/* Home Section */}
-      <section ref={homeRef} className={`${Style.section} ${Style.homeSection} homesection`}>
+      <section className={`${Style.section} ${Style.homeSection} homesection`}>
         <Home />
       </section>
-  
-        {/* Reports Section */}
+
+      {/* Reports Section */}
       <section className={`${Style.section} ${Style.reportsSection} reportsection`}>
         <Reports />
       </section>
-      
-   {/* patients Section */}
-      <section className={`${Style.section}  appointmentsection`}>
-       <DoctorPatients/>
+
+      {/* Patients Section */}
+      <section className={`${Style.section} ${Style.patientsSection} patientssection`}>
+        <DoctorPatients />
       </section>
-
-
-   
 
     </div>
   )
