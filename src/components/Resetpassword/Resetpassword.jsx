@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import styles from './ResetPassword.module.css';
+import styles from './Resetpassword.module.css';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 
