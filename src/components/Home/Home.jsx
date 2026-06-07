@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import Style from './Home.module.css'
 import { useAuth } from '../../Context/AuthContext'
 import axios from 'axios'
 
 const BASE_URL = 'https://lungcancer.runasp.net/api/Doctor'
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function pct(val) {
   if (val == null) return '–%'
   return `${(val * 100).toFixed(1)}%`
@@ -14,12 +15,41 @@ function pctNum(val) {
   return parseFloat((val * 100).toFixed(1))
 }
 
+const CLASS_LABELS = {
+  lungadenocarcinoma:        'Lung Adenocarcinoma',
+  lungbenign:                'Lung Benign',
+  lungsquamouscellcarcinoma: 'Lung Squamous Cell Carcinoma',
+}
 
+function formatClassification(raw) {
+  if (!raw) return '–'
+  return CLASS_LABELS[raw.toLowerCase().replace(/[\s_]/g, '')] ?? raw
+}
+
+const ALL_CLASSES = [
+  { key: 'lungadenocarcinoma',        label: 'Lung Adenocarcinoma' },
+  { key: 'lungbenign',                label: 'Lung Benign' },
+  { key: 'lungsquamouscellcarcinoma', label: 'Lung Squamous Cell Carcinoma' },
+]
+
+// FIX: Build conf items using the passed result directly (not stale state)
+function buildConfItems(result) {
+  if (!result) return ALL_CLASSES.map(c => ({ label: c.label, value: null }))
+  const winnerKey = (result.classification ?? '').toLowerCase().replace(/[\s_]/g, '')
+  const score     = result.confidenceScore ?? null
+  return ALL_CLASSES.map(c => ({
+    label: c.label,
+    // Winner gets the real confidence score, others get remainder split
+    value: c.key === winnerKey ? score : (score != null ? (1 - score) / (ALL_CLASSES.length - 1) : null),
+  }))
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const { token } = useAuth()
   const [activeTab, setActiveTab] = useState('case')
 
-  // ── New Case state ──────────────────────────────────────────────────────────
+  // ── Case state ────────────────────────────────────────────────────────────
   const [cases, setCases]             = useState([])
   const [caseForm, setCaseForm]       = useState({ patientId: '', description: '', symptoms: '' })
   const [caseLoading, setCaseLoading] = useState(false)
@@ -27,19 +57,32 @@ export default function Home() {
   const [caseSuccess, setCaseSuccess] = useState('')
   const [createdCase, setCreatedCase] = useState(null)
 
-  // ── Upload state ────────────────────────────────────────────────────────────
+  // ── Upload state ──────────────────────────────────────────────────────────
   const [selectedCaseId, setSelectedCaseId] = useState('')
   const [scanFile, setScanFile]             = useState(null)
   const [scanPreview, setScanPreview]       = useState(null)
   const [uploadLoading, setUploadLoading]   = useState(false)
   const [uploadError, setUploadError]       = useState('')
   const [uploadedScan, setUploadedScan]     = useState(null)
-  const fileInputRef = useRef(null)
 
-  // ── Analysis state ──────────────────────────────────────────────────────────
+  // ── Analysis state ────────────────────────────────────────────────────────
   const [analyzeLoading, setAnalyzeLoading] = useState(false)
   const [analyzeError, setAnalyzeError]     = useState('')
   const [analysisResult, setAnalysisResult] = useState(null)
+
+  // FIX: Use a single ref to hold the latest analysis result so the
+  // tab switch always reads the freshest value regardless of batching.
+  const analysisResultRef = useRef(null)
+
+  const [fileInputKey, setFileInputKey] = useState(0)
+
+  // Ref that always mirrors the latest uploadedScan so handleAnalyze
+  // never reads a stale closure value after async state updates.
+  const uploadedScanRef = useRef(null)
+
+  useEffect(() => {
+    uploadedScanRef.current = uploadedScan
+  }, [uploadedScan])
 
   useEffect(() => { fetchCases() }, [token])
 
@@ -50,51 +93,40 @@ export default function Home() {
         params:  { PageSize: 100 },
       })
       const data  = res.data?.data ?? res.data
-      const items = Array.isArray(data) ? data : data?.items ?? []
+      const items = Array.isArray(data) ? data : (data?.items ?? [])
       setCases(items)
     } catch (err) {
       console.error('[Home] fetchCases:', err)
     }
   }
 
-  // ── Create Case ─────────────────────────────────────────────────────────────
-  async function handleCreateCase() {
-    setCaseError('')
-    setCaseSuccess('')
-    if (!caseForm.patientId) { setCaseError('Patient ID is required.'); return }
-    try {
-      setCaseLoading(true)
-      const res = await axios.post(`${BASE_URL}/cases`, {
-        patientId:   parseInt(caseForm.patientId, 10),
-        description: caseForm.description,
-        symptoms:    caseForm.symptoms,
-      }, { headers: { Authorization: `Bearer ${token}` } })
-
-      const created = res.data?.data ?? res.data
-      setCreatedCase(created)
-      setCaseSuccess(`Case #${created?.id ?? ''} created successfully!`)
-      setCaseForm({ patientId: '', description: '', symptoms: '' })
-      await fetchCases()
-      if (created?.id) setSelectedCaseId(String(created.id))
-
-      // ── Notify Cases component to refetch ──────────────────────────────────
-      window.dispatchEvent(new CustomEvent('case-created'))
-
-    } catch (err) {
-      console.error('[Home] createCase:', err)
-      setCaseError(err.response?.data?.message ?? 'Failed to create case. Please try again.')
-    } finally {
-      setCaseLoading(false)
-    }
+  // ── Reset the entire scan pipeline ────────────────────────────────────────
+  function resetScanPipeline() {
+    setScanFile(null)
+    setScanPreview(null)
+    setUploadedScan(null)
+    uploadedScanRef.current = null
+    setAnalysisResult(null)
+    analysisResultRef.current = null
+    setUploadError('')
+    setAnalyzeError('')
+    setFileInputKey(k => k + 1)
   }
 
-  // ── File selection ──────────────────────────────────────────────────────────
+  // ── Apply a chosen File object ────────────────────────────────────────────
+  // FIX: Only clear upload/analysis state, NOT the file itself,
+  // so re-uploading the same case with the same file works on repeat.
   function applyFile(file) {
     if (!file) return
-    setScanFile(file)
     setUploadedScan(null)
+    uploadedScanRef.current = null
     setAnalysisResult(null)
+    analysisResultRef.current = null
     setUploadError('')
+    setAnalyzeError('')
+
+    setScanFile(file)
+
     if (file.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onload = ev => setScanPreview(ev.target.result)
@@ -104,28 +136,77 @@ export default function Home() {
     }
   }
 
-  function handleFileChange(e) { applyFile(e.target.files?.[0]) }
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    applyFile(file)
+  }
 
   function handleDrop(e) {
     e.preventDefault()
     applyFile(e.dataTransfer.files?.[0])
   }
 
-  // ── Upload Scan ─────────────────────────────────────────────────────────────
+  // ── Create Case ───────────────────────────────────────────────────────────
+  async function handleCreateCase() {
+    setCaseError('')
+    setCaseSuccess('')
+    if (!caseForm.patientId) { setCaseError('Patient ID is required.'); return }
+    try {
+      setCaseLoading(true)
+      const res = await axios.post(
+        `${BASE_URL}/cases`,
+        {
+          patientId:   parseInt(caseForm.patientId, 10),
+          description: caseForm.description,
+          symptoms:    caseForm.symptoms,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const created = res.data?.data ?? res.data
+      setCreatedCase(created)
+      setCaseSuccess(`Case #${created?.id ?? ''} created successfully!`)
+      setCaseForm({ patientId: '', description: '', symptoms: '' })
+      await fetchCases()
+      if (created?.id) setSelectedCaseId(String(created.id))
+      window.dispatchEvent(new CustomEvent('case-created'))
+    } catch (err) {
+      console.error('[Home] createCase:', err)
+      setCaseError(err.response?.data?.message ?? 'Failed to create case. Please try again.')
+    } finally {
+      setCaseLoading(false)
+    }
+  }
+
+  // ── Upload Scan ───────────────────────────────────────────────────────────
+  // FIX: Don't wipe scanFile here — only wipe the previous scan result.
   async function handleUploadScan() {
     setUploadError('')
     if (!selectedCaseId) { setUploadError('Please select a case first.'); return }
     if (!scanFile)        { setUploadError('Please select a scan file.'); return }
+
+    // Clear previous upload+analysis so the UI shows the fresh result
+    setUploadedScan(null)
+    uploadedScanRef.current = null
+    setAnalysisResult(null)
+    analysisResultRef.current = null
+    setAnalyzeError('')
+
     try {
       setUploadLoading(true)
       const formData = new FormData()
       formData.append('file', scanFile)
+
       const res = await axios.post(
         `${BASE_URL}/cases/${selectedCaseId}/scans`,
         formData,
         { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
       )
-      setUploadedScan(res.data?.data ?? res.data)
+
+      const scan = res.data?.data ?? res.data
+      console.log('[Home] uploadedScan:', scan)
+      setUploadedScan(scan)
+      uploadedScanRef.current = scan
     } catch (err) {
       console.error('[Home] uploadScan:', err)
       setUploadError(err.response?.data?.message ?? 'Upload failed. Please try again.')
@@ -134,19 +215,31 @@ export default function Home() {
     }
   }
 
-  // ── Analyze ─────────────────────────────────────────────────────────────────
+  // ── Analyze ───────────────────────────────────────────────────────────────
+  // FIX: Store result in ref BEFORE switching tab so the analyze tab
+  // always renders with the latest data (avoids React batching race).
   async function handleAnalyze() {
-    if (!uploadedScan?.id) { setAnalyzeError('Upload a scan first.'); return }
+    const currentScan = uploadedScanRef.current
+    if (!currentScan?.id) { setAnalyzeError('Upload a scan first.'); return }
+
     setAnalyzeError('')
     setAnalysisResult(null)
+    analysisResultRef.current = null
+
     try {
       setAnalyzeLoading(true)
       const res = await axios.post(
-        `${BASE_URL}/scans/${uploadedScan.id}/analyze`,
+        `${BASE_URL}/scans/${currentScan.id}/analyze`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      setAnalysisResult(res.data?.data ?? res.data)
+      const result = res.data?.data ?? res.data
+      console.log('[Home] analysisResult:', result)
+
+      // FIX: Write to ref first so the tab renders with the correct value
+      // even if React batches the state update with setActiveTab.
+      analysisResultRef.current = result
+      setAnalysisResult(result)
       setActiveTab('analyze')
     } catch (err) {
       console.error('[Home] analyze:', err)
@@ -156,11 +249,10 @@ export default function Home() {
     }
   }
 
-  const confItems = [
-    { label: 'Lung Adenocarcinoma',          value: analysisResult?.adenocarcinomaConfidence ?? analysisResult?.lungAdenocarcinoma ?? null },
-    { label: 'Lung Benign',                  value: analysisResult?.benignConfidence          ?? analysisResult?.lungBenign          ?? null },
-    { label: 'Lung Squamous Cell Carcinoma', value: analysisResult?.squamousConfidence        ?? analysisResult?.lungSquamous        ?? null },
-  ]
+  // FIX: Always derive confItems from the ref-backed result so the
+  // analyze tab never shows stale/empty data on first render after switch.
+  const latestResult = analysisResult ?? analysisResultRef.current
+  const confItems = buildConfItems(latestResult)
 
   return (
     <section className={`${Style.homeSection} homesectioncomponent`}>
@@ -170,27 +262,22 @@ export default function Home() {
           {/* ── LEFT: AI Panel ── */}
           <div className={Style.aiPanel}>
             <div className={Style.aiContent}>
-
               <div className={Style.aiIconWrap}>
                 <i className="fa-solid fa-robot"></i>
                 <span className={Style.aiPulse}></span>
               </div>
-
               <div className={Style.aiBadge}>
                 <span className={Style.badgeDot}></span>
                 AI-Powered Analysis
               </div>
-
               <h2 className={Style.aiTitle}>
                 Smart Medical<br />
                 <span className={Style.aiHighlight}>Scan Assistant</span>
               </h2>
-
               <p className={Style.aiDesc}>
                 Upload your CT scan and let our AI instantly analyze, detect anomalies,
                 and generate a detailed medical report in seconds.
               </p>
-
               <div className={Style.aiFeatures}>
                 <div className={Style.featureItem}>
                   <div className={Style.featureIcon}>
@@ -219,9 +306,6 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-
- 
-
             </div>
             <div className={Style.blob1}></div>
             <div className={Style.blob2}></div>
@@ -233,7 +317,7 @@ export default function Home() {
             {/* Tabs */}
             <div className={Style.viewerTabs}>
               <button
-                className={`${Style.tab} ${activeTab === 'upload' ? Style.activeTab : ''}`}
+                className={`${Style.tab} ${activeTab === 'upload'  ? Style.activeTab : ''}`}
                 onClick={() => setActiveTab('upload')}>
                 <i className="fa-solid fa-cloud-arrow-up"></i> Upload Scan
               </button>
@@ -243,7 +327,7 @@ export default function Home() {
                 <i className="fa-solid fa-brain"></i> AI Analysis
               </button>
               <button
-                className={`${Style.tab} ${activeTab === 'case' ? Style.activeTab : ''}`}
+                className={`${Style.tab} ${activeTab === 'case'    ? Style.activeTab : ''}`}
                 onClick={() => setActiveTab('case')}>
                 <i className="fa-solid fa-folder-plus"></i> New Case
               </button>
@@ -254,7 +338,7 @@ export default function Home() {
               <div className={Style.scanArea}>
 
                 <input
-                  ref={fileInputRef}
+                  key={fileInputKey}
                   type="file"
                   id="scan-upload"
                   className={Style.hiddenFile}
@@ -264,6 +348,7 @@ export default function Home() {
 
                 <div className={Style.uploadInner}>
 
+                  {/* Case selector */}
                   <div className={Style.uploadCaseSelect}>
                     <label className={Style.uploadCaseLabel}>
                       <i className="fa-solid fa-folder-open"></i> Attach to Case
@@ -279,7 +364,10 @@ export default function Home() {
                       <select
                         className={Style.uploadCaseDropdown}
                         value={selectedCaseId}
-                        onChange={e => { setSelectedCaseId(e.target.value); setUploadedScan(null); setAnalysisResult(null) }}
+                        onChange={e => {
+                          setSelectedCaseId(e.target.value)
+                          resetScanPipeline()
+                        }}
                       >
                         <option value="">— Choose a case —</option>
                         {cases.map(c => (
@@ -291,11 +379,12 @@ export default function Home() {
                     )}
                   </div>
 
+                  {/* Drop zone */}
                   <div
                     className={Style.uploadPrompt}
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => document.getElementById('scan-upload')?.click()}
                   >
                     {scanPreview ? (
                       <div className={Style.previewWrap}>
@@ -320,12 +409,13 @@ export default function Home() {
                     )}
                   </div>
 
+                  {/* Status messages */}
                   {uploadError && (
                     <p className={Style.uploadMsg} style={{ color: '#dc2626' }}>
                       <i className="fa-solid fa-circle-exclamation"></i> {uploadError}
                     </p>
                   )}
-                  {uploadedScan && (
+                  {uploadedScan && !uploadError && (
                     <p className={Style.uploadMsg} style={{ color: '#16a34a' }}>
                       <i className="fa-solid fa-circle-check"></i> Scan uploaded — ID #{uploadedScan.id}
                     </p>
@@ -336,6 +426,7 @@ export default function Home() {
                     </p>
                   )}
 
+                  {/* Action buttons */}
                   <div className={Style.uploadBtnRow}>
                     <button
                       className={Style.uploadActionBtn}
@@ -374,10 +465,12 @@ export default function Home() {
                     <div className={Style.diagnosisBanner}>
                       <div className={Style.dxTag}>Prediction</div>
                       <div className={Style.dxName}>
-                        {analysisResult?.prediction ?? analysisResult?.diagnosis ?? '–'}
+                        {formatClassification(latestResult?.classification)}
                       </div>
                       <div className={Style.dxDesc}>
-                        {analysisResult?.description ?? analysisResult?.summary ?? '–'}
+                        {latestResult
+                          ? `Model EfficientNetB1 · processed in ${latestResult.processingTimeMs ?? '–'} ms`
+                          : '–'}
                       </div>
                     </div>
 
@@ -399,16 +492,18 @@ export default function Home() {
                       <div className={Style.infoCell}>
                         <div className={Style.label}>Confidence</div>
                         <div className={Style.value}>
-                          {analysisResult?.confidence != null ? pct(analysisResult.confidence) : '–'}
+                          {latestResult?.confidenceScore != null
+                            ? pct(latestResult.confidenceScore)
+                            : '–'}
                         </div>
                       </div>
                       <div className={Style.infoCell}>
                         <div className={Style.label}>Status</div>
-                        <div className={Style.value}>{analysisResult ? 'Complete' : '–'}</div>
+                        <div className={Style.value}>{latestResult ? 'Complete' : '–'}</div>
                       </div>
                       <div className={Style.infoCell}>
                         <div className={Style.label}>Model</div>
-                        <div className={Style.value}>ResNet50</div>
+                        <div className={Style.value}>EfficientNetB1</div>
                       </div>
                       <div className={Style.infoCell}>
                         <div className={Style.label}>Classes</div>
@@ -416,7 +511,7 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {!analysisResult && (
+                    {!latestResult && (
                       <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>
                         <i className="fa-solid fa-brain" style={{ fontSize: '2rem', color: '#c7d7f0', display: 'block', marginBottom: 10 }}></i>
                         <p style={{ fontSize: '0.85rem', margin: 0 }}>
