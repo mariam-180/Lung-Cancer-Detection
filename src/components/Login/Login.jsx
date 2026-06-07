@@ -636,46 +636,46 @@ export default function Login() {
   /* Handle Reset Password */
 
 
-  async function handleResetPassword(e) {
-    e.preventDefault();
-    setResetError("");
-    setResetSuccess("");
+  // async function handleResetPassword(e) {
+  //   e.preventDefault();
+  //   setResetError("");
+  //   setResetSuccess("");
 
-    if (newPassword !== confirmPassword) {
-      setResetError("Passwords do not match.");
-      return;
-    }
+  //   if (newPassword !== confirmPassword) {
+  //     setResetError("Passwords do not match.");
+  //     return;
+  //   }
 
-    setResetLoading(true);
+  //   setResetLoading(true);
 
-    try {
-      await axios.post(
-        "https://lungcancer.runasp.net/api/Auth/reset-password",
-        {
-          email: resetEmail,
-          token: resetToken,
-          newPassword: newPassword,
-        }
-      );
+  //   try {
+  //     await axios.post(
+  //       "https://lungcancer.runasp.net/api/Auth/reset-password",
+  //       {
+  //         email: resetEmail,
+  //         token: resetToken,
+  //         newPassword: newPassword,
+  //       }
+  //     );
 
-      setResetSuccess("Password reset successfully!");
+  //     setResetSuccess("Password reset successfully!");
 
-      setTimeout(() => {
-        closeAll();
-        setResetToken("");
-        setResetEmail("");
-        setNewPassword("");
-        setConfirmPassword("");
-      }, 2000);
+  //     setTimeout(() => {
+  //       closeAll();
+  //       setResetToken("");
+  //       setResetEmail("");
+  //       setNewPassword("");
+  //       setConfirmPassword("");
+  //     }, 2000);
 
-    } catch (err) {
-      setResetError(
-        err.response?.data?.message || "Failed to reset password."
-      );
-    } finally {
-      setResetLoading(false);
-    }
-  }
+  //   } catch (err) {
+  //     setResetError(
+  //       err.response?.data?.message || "Failed to reset password."
+  //     );
+  //   } finally {
+  //     setResetLoading(false);
+  //   }
+  // }
 
 
   /* View Controls */
@@ -763,10 +763,10 @@ export default function Login() {
               <button className={styles.authLink} onClick={openForgot} type="button">
                 Forgot Password?
               </button>
-              <span className={styles.authLinkDivider}>|</span>
+              {/* <span className={styles.authLinkDivider}>|</span>
               <button className={styles.authLink} onClick={openReset} type="button">
                 Reset Password
-              </button>
+              </button> */}
             </div>
 
             {/* ✅ Link to register page */}
@@ -834,7 +834,7 @@ export default function Login() {
         )}
 
         {/* ───────── RESET PASSWORD ───────── */}
-        {showReset && (
+        {/* {showReset && (
           <>
             <h2 className={styles.loginTitle}>Reset Password</h2>
 
@@ -918,7 +918,7 @@ export default function Login() {
               </button>
             </div>
           </>
-        )}
+        )} */}
 
       </div>
     </div>
