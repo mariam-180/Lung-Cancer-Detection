@@ -49,7 +49,7 @@ import MainContent from './components/MainContent/MainContent';
 import AdminPage from './components/AdminPage/AdminPage';
 import AuthProvider from './Context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
-import ResetPassword from './components/ResetPassword/ResetPassword';
+import ResetPassword from './components/Resetpassword/Resetpassword';
 
 const routing = createBrowserRouter([
   {
@@ -60,7 +60,7 @@ const routing = createBrowserRouter([
       { index: true, element: <Welcome /> },
       { path: 'register', element: <Register /> },
       { path: 'login', element: <Login /> },
-      { path: 'reset-password', element: <ResetPassword/> },
+      { path: 'resetPassword', element: <ResetPassword /> },
       { path: 'article', element: <Article /> },
       { path: '*', element: <Notfound /> },
 
