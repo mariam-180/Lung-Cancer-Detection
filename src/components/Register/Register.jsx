@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import styles from "./Register.module.css";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
 export default function Register() {
@@ -25,13 +25,29 @@ export default function Register() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  //////////////////////////////////////////////////////
+  // ✅ HANDLE INPUT CHANGE
+  //////////////////////////////////////////////////////
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    // ✅ Restrict license to numbers only
+    if (name === "licenseNumber") {
+      if (!/^\d*$/.test(value)) return; // allow only digits
+    }
+
     setForm((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
+
     setError("");
   };
+
+  //////////////////////////////////////////////////////
+  // ✅ SUBMIT
+  //////////////////////////////////////////////////////
 
   const handleSubmit = async () => {
     setError("");
@@ -51,13 +67,26 @@ export default function Register() {
       return;
     }
 
+    //////////////////////////////////////////////////////
+    // ✅ LICENSE VALIDATION
+    //////////////////////////////////////////////////////
+
+    if (!/^\d{12}$/.test(form.licenseNumber)) {
+      setError("License number must be exactly 12 digits.");
+      return;
+    }
+
+    //////////////////////////////////////////////////////
+    // ✅ PASSWORD VALIDATION
+    //////////////////////////////////////////////////////
+
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
 
     const passwordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
 
     if (!passwordRegex.test(form.password)) {
       setError(
@@ -102,6 +131,10 @@ export default function Register() {
     }
   };
 
+  //////////////////////////////////////////////////////
+  // ✅ UI
+  //////////////////////////////////////////////////////
+
   return (
     <div className={styles.registerPage}>
       <div className={styles.registerCard}>
@@ -112,32 +145,61 @@ export default function Register() {
 
           <div className={styles.registerGroup}>
             <label>Full Name</label>
-            <input type="text" name="fullName" value={form.fullName} onChange={handleChange} />
+            <input
+              type="text"
+              name="fullName"
+              value={form.fullName}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Email</label>
-            <input type="email" name="email" value={form.email} onChange={handleChange} />
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Phone</label>
-            <input type="text" name="phoneNumber" value={form.phoneNumber} onChange={handleChange} />
+            <input
+              type="text"
+              name="phoneNumber"
+              value={form.phoneNumber}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Password</label>
-            <input type="password" name="password" value={form.password} onChange={handleChange} />
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Confirm</label>
-            <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={handleChange} />
+            <input
+              type="password"
+              name="confirmPassword"
+              value={form.confirmPassword}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Gender</label>
-            <select name="gender" value={form.gender} onChange={handleChange}>
+            <select
+              name="gender"
+              value={form.gender}
+              onChange={handleChange}
+            >
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
@@ -145,32 +207,62 @@ export default function Register() {
 
           <div className={styles.registerGroup}>
             <label>DOB</label>
-            <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} />
+            <input
+              type="date"
+              name="dateOfBirth"
+              value={form.dateOfBirth}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Specialization</label>
-            <input type="text" name="specialization" value={form.specialization} onChange={handleChange} />
+            <input
+              type="text"
+              name="specialization"
+              value={form.specialization}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
-            <label>License</label>
-            <input type="text" name="licenseNumber" value={form.licenseNumber} onChange={handleChange} />
+            <label>License (12 digits)</label>
+            <input
+              type="text"
+              name="licenseNumber"
+              maxLength="12"
+              value={form.licenseNumber}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Hospital</label>
-            <input type="text" name="hospitalName" value={form.hospitalName} onChange={handleChange} />
+            <input
+              type="text"
+              name="hospitalName"
+              value={form.hospitalName}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={styles.registerGroup}>
             <label>Experience</label>
-            <input type="number" name="yearsOfExperience" value={form.yearsOfExperience} onChange={handleChange} />
+            <input
+              type="number"
+              name="yearsOfExperience"
+              value={form.yearsOfExperience}
+              onChange={handleChange}
+            />
           </div>
 
           <div className={`${styles.registerGroup} ${styles.fullWidth}`}>
             <label>Bio</label>
-            <textarea name="bio" value={form.bio} onChange={handleChange} />
+            <textarea
+              name="bio"
+              value={form.bio}
+              onChange={handleChange}
+            />
           </div>
 
         </div>
@@ -178,7 +270,11 @@ export default function Register() {
         {error && <p className={styles.errorText}>{error}</p>}
         {success && <p className={styles.successText}>Account created successfully!</p>}
 
-        <button onClick={handleSubmit} disabled={loading} className={styles.registerBtn}>
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className={styles.registerBtn}
+        >
           {loading ? "Creating..." : "Sign Up"}
         </button>
 
