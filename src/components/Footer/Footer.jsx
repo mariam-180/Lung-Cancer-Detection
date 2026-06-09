@@ -1,5 +1,6 @@
-import { useLocation } from "react-router-dom";
+import { Links, useLocation } from "react-router-dom";
 import Style from './Footer.module.css';
+import { Link } from "react-router-dom";
 
 export default function Footer() {
   const location = useLocation();
@@ -39,14 +40,12 @@ export default function Footer() {
             </a>
           </div>
         </div>
-
+        
         {/* ── Links ── */}
         <div className={Style.linksCol}>
           <p className={Style.colTitle}>Platform</p>
-          <a href="#" className={Style.footerLink}>Home</a>
-          <a href="#" className={Style.footerLink}>Articles</a>
-          <a href="#" className={Style.footerLink}>Contact Us</a>
-          <a href="#" className={Style.footerLink}>Login</a>
+          <Link to="/" className={Style.footerLink}>Home</Link>
+          <Link to="/login" className={Style.footerLink}>Login</Link>
         </div>
 
         <div className={Style.linksCol}>

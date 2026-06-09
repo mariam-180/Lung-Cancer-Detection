@@ -199,7 +199,53 @@
 .statusConfirm:hover { border-color: #86efac; background: #f0fdf4; }
 .statusPending:hover { border-color: #fde047; background: #fefce8; }
 .statusCancel:hover  { border-color: #fca5a5; background: #fff5f5; }
+/* ============================= */
+/* ✅ PAGINATION STYLES */
+/* ============================= */
 
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 0;
+  margin-top: 32px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pageBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.pageBtn:hover:not(.disabled):not(.activePage) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.activePage {
+  border: none;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.32);
+}
+
+.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .wrapper    { padding: 20px 16px; }

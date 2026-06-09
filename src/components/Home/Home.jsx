@@ -15,30 +15,87 @@ function pctNum(val) {
   return parseFloat((val * 100).toFixed(1))
 }
 
-const CLASS_LABELS = {
-  lungadenocarcinoma:        'Lung Adenocarcinoma',
-  lungbenign:                'Lung Benign',
-  lungsquamouscellcarcinoma: 'Lung Squamous Cell Carcinoma',
+// Normalize any string to a bare lowercase key with no spaces/underscores/hyphens
+function normalize(str) {
+  if (!str) return ''
+  return String(str).toLowerCase().replace(/[\s_\-]/g, '')
 }
 
-function formatClassification(raw) {
-  if (!raw) return '–'
-  return CLASS_LABELS[raw.toLowerCase().replace(/[\s_]/g, '')] ?? raw
-}
-
-const ALL_CLASSES = [
-  { key: 'lungadenocarcinoma',        label: 'Lung Adenocarcinoma' },
-  { key: 'lungbenign',                label: 'Lung Benign' },
-  { key: 'lungsquamouscellcarcinoma', label: 'Lung Squamous Cell Carcinoma' },
+// All known aliases that map to each canonical class key.
+// Add more as the API returns different strings.
+const CLASS_CONFIG = [
+  {
+    key: 'adenocarcinoma',
+    label: 'Lung Adenocarcinoma',
+    aliases: [
+      'lungadenocarcinoma',
+      'adenocarcinoma',
+      'lung adenocarcinoma',
+      'lungadenoca',
+      'adeno',
+    ],
+  },
+  {
+    key: 'benign',
+    label: 'Lung Benign',
+    aliases: [
+      'lungbenign',
+      'benign',
+      'lung benign',
+      'normal',
+      'lungbenigntissue',
+    ],
+  },
+  {
+    key: 'squamous',
+    label: 'Lung Squamous Cell Carcinoma',
+    aliases: [
+      'lungsquamouscellcarcinoma',
+      'squamouscellcarcinoma',
+      'squamous',
+      'scc',
+      'lscc',
+      'squamouscell',
+      'lung squamous cell carcinoma',
+      'squamous cell carcinoma',
+      'largecellcarcinoma',
+      'largecell',
+    ],
+  },
 ]
 
-// Winner gets the real confidence score (e.g. 99.9%)
-// Non-winners get exactly 0% — only the winner's bar is colored
+// Build a flat lookup: normalizedAlias → canonical key
+const ALIAS_MAP = {}
+CLASS_CONFIG.forEach(cls => {
+  cls.aliases.forEach(alias => {
+    ALIAS_MAP[normalize(alias)] = cls.key
+  })
+})
+
+// Resolve any API string to a canonical key (falls back to the normalized string itself)
+function resolveKey(raw) {
+  if (!raw) return ''
+  const n = normalize(raw)
+  return ALIAS_MAP[n] ?? n
+}
+
+// Display label for whatever the API returns
+function formatClassification(raw) {
+  if (!raw) return '–'
+  const key = resolveKey(raw)
+  return CLASS_CONFIG.find(c => c.key === key)?.label ?? raw
+}
+
+// Build confidence items: winner gets the real score, others get 0%
 function buildConfItems(result) {
-  if (!result) return ALL_CLASSES.map(c => ({ label: c.label, value: null, isWinner: false }))
-  const winnerKey = (result.classification ?? '').toLowerCase().replace(/[\s_]/g, '')
+  if (!result) {
+    return CLASS_CONFIG.map(c => ({ label: c.label, value: null, isWinner: false }))
+  }
+
+  const winnerKey = resolveKey(result.classification)
   const score     = result.confidenceScore ?? null
-  return ALL_CLASSES.map(c => ({
+
+  return CLASS_CONFIG.map(c => ({
     label:    c.label,
     value:    c.key === winnerKey ? score : (score != null ? 0 : null),
     isWinner: c.key === winnerKey,
@@ -51,12 +108,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('upload')
 
   // ── Case state ────────────────────────────────────────────────────────────
-  const [cases, setCases]             = useState([])
-  const [caseForm, setCaseForm]       = useState({ patientId: '', description: '', symptoms: '' })
-  const [caseLoading, setCaseLoading] = useState(false)
-  const [caseError, setCaseError]     = useState('')
-  const [caseSuccess, setCaseSuccess] = useState('')
-  const [createdCase, setCreatedCase] = useState(null)
+  const [cases, setCases] = useState([])
 
   // ── Upload state ──────────────────────────────────────────────────────────
   const [selectedCaseId, setSelectedCaseId] = useState('')
@@ -74,9 +126,17 @@ export default function Home() {
   const analysisResultRef = useRef(null)
   const [fileInputKey, setFileInputKey]     = useState(0)
   const uploadedScanRef                     = useRef(null)
+  const fileInputRef                        = useRef(null)
 
   useEffect(() => { uploadedScanRef.current = uploadedScan }, [uploadedScan])
   useEffect(() => { fetchCases() }, [token])
+
+  // ── Refresh cases dropdown when a new case is created in Cases.jsx ────────
+  useEffect(() => {
+    const handler = () => fetchCases()
+    window.addEventListener('caseCreated', handler)
+    return () => window.removeEventListener('caseCreated', handler)
+  }, [])
 
   async function fetchCases() {
     try {
@@ -89,6 +149,20 @@ export default function Home() {
       setCases(items)
     } catch (err) {
       console.error('[Home] fetchCases:', err)
+    }
+  }
+
+  // ── Silently delete an uploaded-but-not-analyzed scan from the backend ────
+  async function deleteOrphanScan(scan) {
+    if (!scan?.id) return
+    try {
+      await axios.delete(`${BASE_URL}/scans/${scan.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      console.log('[Home] orphan scan deleted:', scan.id)
+    } catch (err) {
+      // Non-fatal — log and move on
+      console.warn('[Home] could not delete orphan scan:', err)
     }
   }
 
@@ -106,8 +180,6 @@ export default function Home() {
 
   function applyFile(file) {
     if (!file) return
-    setUploadedScan(null)
-    uploadedScanRef.current = null
     setAnalysisResult(null)
     analysisResultRef.current = null
     setUploadError('')
@@ -133,81 +205,75 @@ export default function Home() {
     applyFile(e.dataTransfer.files?.[0])
   }
 
-  // async function handleCreateCase() {
-  //   setCaseError('')
-  //   setCaseSuccess('')
-  //   if (!caseForm.patientId) { setCaseError('Patient ID is required.'); return }
-  //   try {
-  //     setCaseLoading(true)
-  //     const res = await axios.post(
-  //       `${BASE_URL}/cases`,
-  //       {
-  //         patientId:   parseInt(caseForm.patientId, 10),
-  //         description: caseForm.description,
-  //         symptoms:    caseForm.symptoms,
-  //       },
-  //       { headers: { Authorization: `Bearer ${token}` } }
-  //     )
-  //     const created = res.data?.data ?? res.data
-  //     setCreatedCase(created)
-  //     setCaseSuccess(`Case #${created?.id ?? ''} created successfully!`)
-  //     setCaseForm({ patientId: '', description: '', symptoms: '' })
-  //     await fetchCases()
-  //     if (created?.id) setSelectedCaseId(String(created.id))
-  //     window.dispatchEvent(new CustomEvent('case-created'))
-  //   } catch (err) {
-  //     console.error('[Home] createCase:', err)
-  //     setCaseError(err.response?.data?.message ?? 'Failed to create case. Please try again.')
-  //   } finally {
-  //     setCaseLoading(false)
-  //   }
-  // }
+  // ── Re-upload: delete the orphan scan first, then let user pick a new file ─
+  async function handleReupload() {
+    const orphan = uploadedScanRef.current
 
-  async function handleUploadScan() {
-    setUploadError('')
-    if (!selectedCaseId) { setUploadError('Please select a case first.'); return }
-    if (!scanFile)        { setUploadError('Please select a scan file.'); return }
+    // Clear state immediately so UI reacts
+    setScanFile(null)
+    setScanPreview(null)
     setUploadedScan(null)
     uploadedScanRef.current = null
     setAnalysisResult(null)
     analysisResultRef.current = null
+    setUploadError('')
     setAnalyzeError('')
-    try {
-      setUploadLoading(true)
-      const formData = new FormData()
-      formData.append('file', scanFile)
-      const res = await axios.post(
-        `${BASE_URL}/cases/${selectedCaseId}/scans`,
-        formData,
-        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
-      )
-      const scan = res.data?.data ?? res.data
-      console.log('[Home] uploadedScan:', scan)
-      setUploadedScan(scan)
-      uploadedScanRef.current = scan
-    } catch (err) {
-      console.error('[Home] uploadScan:', err)
-      setUploadError(err.response?.data?.message ?? 'Upload failed. Please try again.')
-    } finally {
-      setUploadLoading(false)
-    }
+    setFileInputKey(k => k + 1)
+
+    // Delete the orphan in the background (non-blocking)
+    if (orphan?.id) deleteOrphanScan(orphan)
+
+    setTimeout(() => { fileInputRef.current?.click() }, 50)
   }
 
+  // ── Internal: upload scan file to backend ─────────────────────────────────
+  async function uploadScan() {
+    const formData = new FormData()
+    formData.append('file', scanFile)
+    const res = await axios.post(
+      `${BASE_URL}/cases/${selectedCaseId}/scans`,
+      formData,
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
+    )
+    const scan = res.data?.data ?? res.data
+    setUploadedScan(scan)
+    uploadedScanRef.current = scan
+    return scan
+  }
+
+  // ── "Run AI Analysis": upload then analyze in one flow ────────────────────
   async function handleAnalyze() {
-    const currentScan = uploadedScanRef.current
-    if (!currentScan?.id) { setAnalyzeError('Upload a scan first.'); return }
+    setUploadError('')
     setAnalyzeError('')
-    setAnalysisResult(null)
-    analysisResultRef.current = null
+
+    if (!selectedCaseId) { setUploadError('Please select a case first.'); return }
+    if (!scanFile)        { setUploadError('Please select a scan file.'); return }
+
     try {
       setAnalyzeLoading(true)
+
+      // Step 1 — upload
+      setUploadLoading(true)
+      let scan
+      try {
+        scan = await uploadScan()
+      } catch (err) {
+        console.error('[Home] uploadScan:', err)
+        setUploadError(err.response?.data?.message ?? 'Upload failed. Please try again.')
+        return
+      } finally {
+        setUploadLoading(false)
+      }
+
+      // Step 2 — analyze
       const res = await axios.post(
-        `${BASE_URL}/scans/${currentScan.id}/analyze`,
+        `${BASE_URL}/scans/${scan.id}/analyze`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const result = res.data?.data ?? res.data
-      console.log('[Home] analysisResult:', result)
+      console.log('[Home] analysisResult raw classification:', result?.classification)
+      console.log('[Home] resolved key:', resolveKey(result?.classification))
       analysisResultRef.current = result
       setAnalysisResult(result)
       setActiveTab('analyze')
@@ -294,7 +360,6 @@ export default function Home() {
                 onClick={() => setActiveTab('analyze')}>
                 <i className="fa-solid fa-brain"></i> AI Analysis
               </button>
-            
             </div>
 
             {/* ══ UPLOAD TAB ══════════════════════════════════════════════════ */}
@@ -302,6 +367,7 @@ export default function Home() {
               <div className={Style.scanArea}>
                 <input
                   key={fileInputKey}
+                  ref={fileInputRef}
                   type="file"
                   id="scan-upload"
                   className={Style.hiddenFile}
@@ -317,10 +383,7 @@ export default function Home() {
                     </label>
                     {cases.length === 0 ? (
                       <p className={Style.uploadCaseWarn}>
-                        No cases yet.{' '}
-                        <button className={Style.uploadCaseLink} onClick={() => setActiveTab('case')}>
-                          Create one →
-                        </button>
+                        No cases yet — create one in the Cases section.
                       </p>
                     ) : (
                       <select
@@ -346,12 +409,15 @@ export default function Home() {
                     className={Style.uploadPrompt}
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleDrop}
-                    onClick={() => document.getElementById('scan-upload')?.click()}
+                    onClick={() => !scanFile && fileInputRef.current?.click()}
                   >
                     {scanPreview ? (
                       <div className={Style.previewWrap}>
                         <img src={scanPreview} alt="Scan preview" className={Style.previewImg} />
-                        <div className={Style.previewOverlay}>
+                        <div
+                          className={Style.previewOverlay}
+                          onClick={e => { e.stopPropagation(); handleReupload() }}
+                        >
                           <i className="fa-solid fa-repeat"></i> Change file
                         </div>
                       </div>
@@ -377,11 +443,6 @@ export default function Home() {
                       <i className="fa-solid fa-circle-exclamation"></i> {uploadError}
                     </p>
                   )}
-                  {uploadedScan && !uploadError && (
-                    <p className={Style.uploadMsg} style={{ color: '#16a34a' }}>
-                      <i className="fa-solid fa-circle-check"></i> Scan uploaded — ID #{uploadedScan.id}
-                    </p>
-                  )}
                   {analyzeError && (
                     <p className={Style.uploadMsg} style={{ color: '#dc2626' }}>
                       <i className="fa-solid fa-circle-exclamation"></i> {analyzeError}
@@ -390,27 +451,25 @@ export default function Home() {
 
                   {/* Action buttons */}
                   <div className={Style.uploadBtnRow}>
-                    <button
-                      className={Style.uploadActionBtn}
-                      onClick={handleUploadScan}
-                      disabled={uploadLoading || !scanFile || !selectedCaseId}
-                    >
-                      {uploadLoading
-                        ? <><i className="fa-solid fa-spinner fa-spin"></i> Uploading…</>
-                        : <><i className="fa-solid fa-cloud-arrow-up"></i> Upload Scan</>}
-                    </button>
-
-                    {uploadedScan && (
+                    {scanFile && !analyzeLoading && (
                       <button
-                        className={Style.analyzeActionBtn}
-                        onClick={handleAnalyze}
+                        className={Style.reuploadActionBtn}
+                        onClick={handleReupload}
                         disabled={analyzeLoading}
                       >
-                        {analyzeLoading
-                          ? <><i className="fa-solid fa-spinner fa-spin"></i> Analyzing…</>
-                          : <><i className="fa-solid fa-brain"></i> Run AI Analysis</>}
+                        <i className="fa-solid fa-rotate"></i> Re-upload CT Scan
                       </button>
                     )}
+
+                    <button
+                      className={Style.analyzeActionBtn}
+                      onClick={handleAnalyze}
+                      disabled={analyzeLoading || uploadLoading || !scanFile || !selectedCaseId}
+                    >
+                      {(analyzeLoading || uploadLoading)
+                        ? <><i className="fa-solid fa-spinner fa-spin"></i> {uploadLoading ? 'Uploading…' : 'Analyzing…'}</>
+                        : <><i className="fa-solid fa-brain"></i> Run AI Analysis</>}
+                    </button>
                   </div>
 
                 </div>
@@ -436,24 +495,23 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Confidence bars — only the winner is colored, others show 0% gray */}
+                    {/* Confidence bars */}
                     <div className={Style.confList}>
                       {confItems.map(({ label, value, isWinner }) => (
                         <div key={label} className={Style.confItem}>
                           <div className={Style.confHeader}>
                             <span className={Style.confLabel}>{label}</span>
-                            <span className={Style.confPercent}>{pct(value)}</span>
+                            <span
+                              className={Style.confPercent}
+                              style={{ color: isWinner ? '#4f78c8' : '#94a3b8' }}
+                            >
+                              {pct(value)}
+                            </span>
                           </div>
                           <div className={Style.confBarBg}>
                             <div
-                              className={Style.confBarFill}
-                              style={{
-                                width:      `${pctNum(value)}%`,
-                                // Only color the winner's bar; others stay gray/transparent
-                                background: isWinner
-                                  ? undefined          // let CSS class handle the gradient
-                                  : 'transparent',
-                              }}
+                              className={isWinner ? Style.confBarFill : Style.confBarFillDim}
+                              style={{ width: `${pctNum(value)}%` }}
                             />
                           </div>
                         </div>
@@ -472,14 +530,6 @@ export default function Home() {
                       <div className={Style.infoCell}>
                         <div className={Style.label}>Status</div>
                         <div className={Style.value}>{latestResult ? 'Complete' : '–'}</div>
-                      </div>
-                      <div className={Style.infoCell}>
-                        <div className={Style.label}>Model</div>
-                        <div className={Style.value}>EfficientNetB1</div>
-                      </div>
-                      <div className={Style.infoCell}>
-                        <div className={Style.label}>Classes</div>
-                        <div className={Style.value}>3</div>
                       </div>
                     </div>
 
@@ -504,7 +554,7 @@ export default function Home() {
                 <div className={Style.disclaimer}>
                   <span>⚠️</span>
                   <span>
-                    <strong>Research & Testing Only.</strong> This tool is not a certified medical
+                    <strong>Research &amp; Testing Only.</strong> This tool is not a certified medical
                     device and is strictly for model validation. Results are probabilistic and
                     contain a margin of error; scans may be inaccurate or provide false
                     positives/negatives. Do not use these outputs for clinical diagnosis or patient
@@ -513,94 +563,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-
-            {/* ══ NEW CASE TAB ═══════════════════════════════════════════════ */}
-            {/* {activeTab === 'case' && (
-              <div className={Style.tabContent}>
-                <div className={Style.caseCard}>
-                  <div className={Style.caseCardHeader}>
-                    <div className={Style.caseCardIcon}>
-                      <i className="fa-solid fa-folder-plus"></i>
-                    </div>
-                    <div>
-                      <h3 className={Style.caseCardTitle}>Create New Case</h3>
-                      <p className={Style.caseCardSub}>Register a new patient case</p>
-                    </div>
-                  </div>
-
-                  {caseError && (
-                    <p style={{ color: '#dc2626', fontSize: '0.82rem', margin: '0 0 4px', fontWeight: 600 }}>
-                      <i className="fa-solid fa-circle-exclamation"></i> {caseError}
-                    </p>
-                  )}
-                  {caseSuccess && (
-                    <p style={{ color: '#16a34a', fontSize: '0.82rem', margin: '0 0 4px', fontWeight: 600 }}>
-                      <i className="fa-solid fa-circle-check"></i> {caseSuccess}
-                    </p>
-                  )}
-
-                  <div className={Style.formGrid}>
-                    <div className={`${Style.formGroup} ${Style.fullWidth}`}>
-                      <label className={Style.formLabel}>
-                        <i className="fa-solid fa-id-card"></i> Patient ID
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="e.g. 1"
-                        className={Style.formInput}
-                        value={caseForm.patientId}
-                        onChange={e => setCaseForm(f => ({ ...f, patientId: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={`${Style.formGroup} ${Style.fullWidth}`}>
-                      <label className={Style.formLabel}>
-                        <i className="fa-solid fa-notes-medical"></i> Description
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Case description…"
-                        className={Style.formInput}
-                        value={caseForm.description}
-                        onChange={e => setCaseForm(f => ({ ...f, description: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={`${Style.formGroup} ${Style.fullWidth}`}>
-                      <label className={Style.formLabel}>
-                        <i className="fa-solid fa-stethoscope"></i> Symptoms
-                      </label>
-                      <textarea
-                        placeholder="Enter patient symptoms…"
-                        className={`${Style.formInput} ${Style.formTextarea}`}
-                        value={caseForm.symptoms}
-                        onChange={e => setCaseForm(f => ({ ...f, symptoms: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    className={Style.actionBtn}
-                    onClick={handleCreateCase}
-                    disabled={caseLoading}
-                  >
-                    {caseLoading
-                      ? <><i className="fa-solid fa-spinner fa-spin"></i> Creating…</>
-                      : <><i className="fa-solid fa-plus"></i> Create Case</>}
-                  </button>
-
-                  {createdCase && (
-                    <button
-                      className={Style.actionBtn}
-                      style={{ marginTop: 8, background: 'white', color: '#4f78c8', border: '1px solid #4f78c8', boxShadow: 'none' }}
-                      onClick={() => setActiveTab('upload')}
-                    >
-                      <i className="fa-solid fa-arrow-right"></i> Continue to Upload Scan
-                    </button>
-                  )}
-                </div>
-              </div>
-            )} */}
 
           </div>
         </div>
