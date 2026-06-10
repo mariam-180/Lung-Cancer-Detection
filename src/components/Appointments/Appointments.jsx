@@ -308,6 +308,7 @@ export default function Appointments() {
                 </div>
                 <div className={Style.detailRows}>
                   {[
+                    ['Patient ID', selected.patientId    ?? '—'],
                     ['Patient',  selected.patientName                   || '—'],
                     ['Doctor',   selected.doctorName                    || '—'],
                     ['Date',     formatDate(selected.appointmentDate)       ],
